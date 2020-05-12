@@ -15,10 +15,10 @@ using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace CrewlinkExtractor
 {
-    public class ParseCustom
+    public class Extractor
     {
-        public static readonly String DEST = "results/txt/parse_custom.txt";
 
+        public static readonly String DEST = "results/txt/parse_custom.txt";
         public static readonly String SRC = "dutyplan.pdf";
 
         public static void Main(String[] args)
@@ -26,25 +26,49 @@ namespace CrewlinkExtractor
             FileInfo file = new FileInfo(DEST);
             file.Directory.Create();
 
-            new ParseCustom().ExtractDutyPlanText(SRC);
+            PDFPlan dutyplan = new PDFPlan(SRC);
+            TextDutyPlan txtdutyplan = new TextDutyPlan(dutyplan.duties, dutyplan.period);
 
-            Console.Read();
-        }
-
-        public virtual void ExtractDutyPlanText(String pdfpath)
-        {
-            PdfDocument pdfDoc = new PdfDocument(new PdfReader(pdfpath));
-
-            using (StreamWriter writer = new StreamWriter(DEST))
+            using (StreamWriter writer = new StreamWriter(Extractor.DEST))
             {
-                writer.Write(ExtractDutyTexts(pdfDoc));
+                writer.Write(txtdutyplan.duties);
             }
 
-            Console.Write(ExtractPlanPeriodText(pdfDoc));
+            Console.Write(txtdutyplan.startDate);
+            Console.Read();
+        }
+    }
+
+    public class TextDutyPlan
+    {
+        public String startDate;
+        public String endDate;
+        public String[] duties;
+        public String miscData;
+
+        public TextDutyPlan(String dutystream, String period)
+        {
+            startDate = period.Substring(0, 7);
+            endDate = period.Substring(period.Length - 7);
+            duties = new string[] { dutystream };
+            miscData = null;
+        }
+    }
+
+    public class PDFPlan
+    {
+        public String duties;
+        public String period;
+
+        public PDFPlan(String pdfpath)
+        {
+            PdfDocument pdfDoc = new PdfDocument(new PdfReader(pdfpath));
+            ExtractPlanPeriodText(pdfDoc);
+            ExtractDutyTexts(pdfDoc);
             pdfDoc.Close();
         }
 
-        public virtual string ExtractPlanPeriodText(PdfDocument pdfDoc)
+        public virtual void ExtractPlanPeriodText(PdfDocument pdfDoc)
         {
             Rectangle planpriodare = new Rectangle(563, 638, 9, 111);
 
@@ -53,10 +77,10 @@ namespace CrewlinkExtractor
 
             // Note: If you want to re-use the PdfCanvasProcessor, you must call PdfCanvasProcessor.reset()
             new PdfCanvasProcessor(strategy).ProcessPageContent(pdfDoc.GetFirstPage());
-            return strategy.GetResultantText();
+            period = strategy.GetResultantText();
         }
 
-        public virtual string ExtractPageDutys(PdfPage pdfPage)
+        public virtual String ExtractPageDutys(PdfPage pdfPage)
         {
             Rectangle leftdutycolumn = new Rectangle(0, 554, 490, 290);
             Rectangle middledutycolumn = new Rectangle(0, 290, 490, 255);
@@ -64,8 +88,6 @@ namespace CrewlinkExtractor
 
             TextRegionEventFilter regionFilter = new TextRegionEventFilter(leftdutycolumn);
             ITextExtractionStrategy strategy = new FilteredTextEventListener(new LocationTextExtractionStrategy(), regionFilter);
-
-            // Note: If you want to re-use the PdfCanvasProcessor, you must call PdfCanvasProcessor.reset()
             new PdfCanvasProcessor(strategy).ProcessPageContent(pdfPage);
             String PageDutyText = strategy.GetResultantText();
 
@@ -82,8 +104,7 @@ namespace CrewlinkExtractor
             return PageDutyText;
         }
 
-
-        public virtual String ExtractDutyTexts(PdfDocument pdfDoc)
+        public virtual void ExtractDutyTexts(PdfDocument pdfDoc)
         {
             String DutyTexts = null;
 
@@ -92,7 +113,7 @@ namespace CrewlinkExtractor
                 DutyTexts += ExtractPageDutys(pdfDoc.GetPage(i));
             }
 
-            return DutyTexts;
+            duties = DutyTexts;
         }
     }
 }
