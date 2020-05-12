@@ -11,8 +11,9 @@ using iText.Kernel.Font;
 using iText.Kernel.Geom;
 using iText.Kernel.Pdf.Canvas.Parser.Data;
 using iText.Kernel.Pdf.Canvas.Parser.Filter;
+using System.Runtime.InteropServices.WindowsRuntime;
 
-namespace iText.Samples.Sandbox.Parse
+namespace CrewlinkExtractor
 {
     public class ParseCustom
     {
@@ -25,13 +26,38 @@ namespace iText.Samples.Sandbox.Parse
             FileInfo file = new FileInfo(DEST);
             file.Directory.Create();
 
-            new ParseCustom().ManipulatePdf(DEST);
+            new ParseCustom().ExtractDutyPlanText(SRC);
+
+            Console.Read();
         }
 
-        public virtual void ManipulatePdf(String dest)
+        public virtual void ExtractDutyPlanText(String pdfpath)
         {
-            PdfDocument pdfDoc = new PdfDocument(new PdfReader(SRC));
+            PdfDocument pdfDoc = new PdfDocument(new PdfReader(pdfpath));
 
+            using (StreamWriter writer = new StreamWriter(DEST))
+            {
+                writer.Write(ExtractDutyTexts(pdfDoc));
+            }
+
+            Console.Write(ExtractPlanPeriodText(pdfDoc));
+            pdfDoc.Close();
+        }
+
+        public virtual string ExtractPlanPeriodText(PdfDocument pdfDoc)
+        {
+            Rectangle planpriodare = new Rectangle(563, 638, 9, 111);
+
+            TextRegionEventFilter regionFilter = new TextRegionEventFilter(planpriodare);
+            ITextExtractionStrategy strategy = new FilteredTextEventListener(new LocationTextExtractionStrategy(), regionFilter);
+
+            // Note: If you want to re-use the PdfCanvasProcessor, you must call PdfCanvasProcessor.reset()
+            new PdfCanvasProcessor(strategy).ProcessPageContent(pdfDoc.GetFirstPage());
+            return strategy.GetResultantText();
+        }
+
+        public virtual string ExtractPageDutys(PdfPage pdfPage)
+        {
             Rectangle leftdutycolumn = new Rectangle(0, 554, 490, 290);
             Rectangle middledutycolumn = new Rectangle(0, 290, 490, 255);
             Rectangle rightdutycolumn = new Rectangle(0, 0, 490, 290);
@@ -40,68 +66,33 @@ namespace iText.Samples.Sandbox.Parse
             ITextExtractionStrategy strategy = new FilteredTextEventListener(new LocationTextExtractionStrategy(), regionFilter);
 
             // Note: If you want to re-use the PdfCanvasProcessor, you must call PdfCanvasProcessor.reset()
-            new PdfCanvasProcessor(strategy).ProcessPageContent(pdfDoc.GetFirstPage());
-
-            String leftdutycolumnText = strategy.GetResultantText();
+            new PdfCanvasProcessor(strategy).ProcessPageContent(pdfPage);
+            String PageDutyText = strategy.GetResultantText();
 
             regionFilter = new TextRegionEventFilter(middledutycolumn);
             strategy = new FilteredTextEventListener(new LocationTextExtractionStrategy(), regionFilter);
-            new PdfCanvasProcessor(strategy).ProcessPageContent(pdfDoc.GetFirstPage());
-            String middledutycolumnText = strategy.GetResultantText();
-
+            new PdfCanvasProcessor(strategy).ProcessPageContent(pdfPage);
+            PageDutyText += strategy.GetResultantText();
+            
             regionFilter = new TextRegionEventFilter(rightdutycolumn);
             strategy = new FilteredTextEventListener(new LocationTextExtractionStrategy(), regionFilter);
-            new PdfCanvasProcessor(strategy).ProcessPageContent(pdfDoc.GetFirstPage());
-            String rightdutycolumnText = strategy.GetResultantText();
+            new PdfCanvasProcessor(strategy).ProcessPageContent(pdfPage);
+            PageDutyText += strategy.GetResultantText();
 
-            pdfDoc.Close();
-
-            using (StreamWriter writer = new StreamWriter(dest))
-            {
-                writer.Write(leftdutycolumnText);
-                writer.Write(middledutycolumnText);
-                writer.Write(rightdutycolumnText);
-            }
+            return PageDutyText;
         }
 
-        // The custom filter filters only the text of which the font name ends with Bold or Oblique.
-        protected class CustomFontFilter : TextRegionEventFilter
+
+        public virtual String ExtractDutyTexts(PdfDocument pdfDoc)
         {
-            public CustomFontFilter(Rectangle filterRect)
-                : base(filterRect)
+            String DutyTexts = null;
+
+            for(int i = 1; i<= pdfDoc.GetNumberOfPages(); i++)
             {
+                DutyTexts += ExtractPageDutys(pdfDoc.GetPage(i));
             }
 
-            public override bool Accept(IEventData data, EventType type)
-            {
-                if (type.Equals(EventType.RENDER_TEXT))
-                {
-                    TextRenderInfo renderInfo = (TextRenderInfo)data;
-                    PdfFont font = renderInfo.GetFont();
-                    if (null != font)
-                    {
-                        String fontName = font.GetFontProgram().GetFontNames().GetFontName();
-                        return fontName.EndsWith("Bold") || fontName.EndsWith("Oblique");
-                    }
-                }
-
-                return false;
-            }
+            return DutyTexts;
         }
     }
 }
-
-
-
-
-//namespace CrewlinkExtractor
-//{
-//    class Program
-//    {
-//        static void Main(string[] args)
-//        {
-//            Console.Write("Hello World");
-//            Console.Read();
-//        }
-//    }
-//}
