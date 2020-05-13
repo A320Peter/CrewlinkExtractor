@@ -40,37 +40,68 @@ namespace CrewlinkExtractor
             }
             Console.WriteLine(dutyplan.period);
             DutyPlanParser dutyparser = new DutyPlanParser();
-            Console.WriteLine(dutyparser.Parsedate(txtdutyplan.startDate));
+            Console.WriteLine(dutyparser.ParseDate(txtdutyplan.startDate));
+            
+            if (dutyparser.ContainsFlight(txtdutyplan.dutyDay[52]))
+            {
+                Flight[] flight = dutyparser.ParseFlight(txtdutyplan.dutyDay[53]);
+
+                for(int i = 0; i<flight.Length; i++)
+                {
+                    Console.WriteLine(flight[i].startDate);
+                    Console.WriteLine(flight[i].endDate);
+                    Console.WriteLine(flight[i].origin);
+                    Console.WriteLine(flight[i].destination);
+                    Console.WriteLine(flight[i].flightnumber);
+                    Console.WriteLine(flight[i].deadHead);
+                }
+            }
+
+
             Console.WriteLine("Duty Plan in txt format successfully created.");
             Console.Read();
         }
     }
 
-    public class Flight
+    public class Flight : Duty
     {
-        public DateTime startDate;
-        public DateTime endDate;
         public String origin;
         public String destination;
+        public String flightnumber;
         public bool deadHead;
         public bool activeTakeoff;
         public bool activeLanding;
     }
 
-    public class DutyPlan
+    public class Duty
     {
-        public DateTime startDate;
-        public DateTime endDate;
+        public String startDate;
+        public String endDate;
     }
 
     public class DutyPlanParser
     {
-        public void Parseduties(string[] duties)
+        public bool ContainsFlight(string dutyDay)
         {
-            
+            return (dutyDay.Substring(dutyDay.IndexOf("OS") - 2, 1) != " ") & (dutyDay.Substring(dutyDay.IndexOf("OS") - 1, 1) != " ") & (dutyDay.Substring(dutyDay.IndexOf("OS") + 2, 1) == " ");
         }
 
-        public DateTime Parsedate(string date)
+        public Flight[] ParseFlight(string dutyDay)
+        {
+            List<Flight> flight = new List<Flight>();
+            while (dutyDay.IndexOf("OS") > -1)
+            {                
+                String flightbuffer = dutyDay.Substring(dutyDay.IndexOf("OS") - 3, 28);
+                bool deadhead = flightbuffer.Substring(0, 3) == "DH/";
+                flightbuffer = flightbuffer.Substring(3);
+                String[] flight_buffer = flightbuffer.Split(new char[] { ' ' });
+                flight.Add(new Flight() { deadHead = deadhead, flightnumber = flight_buffer[0] + flight_buffer[1], origin = flight_buffer[2], startDate = flight_buffer[3], endDate = flight_buffer[4],  destination = flight_buffer[5].Substring(0, 3) });
+                dutyDay = dutyDay.Substring(dutyDay.IndexOf("OS") +25);
+            }
+            return flight.ToArray();
+        }
+
+        public DateTime ParseDate(string date)
         {
             int year = Int32.Parse(date.Substring(5)) + 2000;
             int month = ParseMonth(date.Substring(2, 3));
