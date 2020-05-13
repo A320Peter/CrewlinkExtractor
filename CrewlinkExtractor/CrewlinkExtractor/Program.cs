@@ -13,6 +13,7 @@ using iText.Kernel.Pdf.Canvas.Parser.Data;
 using iText.Kernel.Pdf.Canvas.Parser.Filter;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Org.BouncyCastle.Security;
+using Org.BouncyCastle.Asn1.Mozilla;
 
 namespace CrewlinkExtractor
 {
@@ -37,8 +38,64 @@ namespace CrewlinkExtractor
                     writer.WriteLine(txtdutyplan.dutyDay[i]);
                 }
             }
-            Console.Write("Duty Plan in txt format successfully created.");
+            Console.WriteLine(dutyplan.period);
+            DutyPlanParser dutyparser = new DutyPlanParser();
+            Console.WriteLine(dutyparser.Parsedate(txtdutyplan.startDate));
+            Console.WriteLine("Duty Plan in txt format successfully created.");
             Console.Read();
+        }
+    }
+
+    public class Flight
+    {
+        public DateTime startDate;
+        public DateTime endDate;
+        public String origin;
+        public String destination;
+        public bool deadHead;
+        public bool activeTakeoff;
+        public bool activeLanding;
+    }
+
+    public class DutyPlan
+    {
+        public DateTime startDate;
+        public DateTime endDate;
+    }
+
+    public class DutyPlanParser
+    {
+        public void Parseduties(string[] duties)
+        {
+            
+        }
+
+        public DateTime Parsedate(string date)
+        {
+            int year = Int32.Parse(date.Substring(5)) + 2000;
+            int month = ParseMonth(date.Substring(2, 3));
+            int day = Int32.Parse(date.Substring(0, 2));
+            return new DateTime(year, month, day);
+        }
+
+        public int ParseMonth(string month)
+        {
+            switch (month)
+            {
+                case "Jan": return 1;
+                case "Feb": return 2;
+                case "Mar": return 3;
+                case "Apr": return 4;
+                case "May": return 5;
+                case "Jun": return 6;
+                case "Jul": return 7;
+                case "Aug": return 8;
+                case "Sep": return 9;
+                case "Oct": return 10;
+                case "Nov": return 11;
+                case "Dec": return 12;
+                default: return 0;
+            }
         }
     }
 
