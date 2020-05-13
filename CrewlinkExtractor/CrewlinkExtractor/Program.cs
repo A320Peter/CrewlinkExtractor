@@ -12,6 +12,7 @@ using iText.Kernel.Geom;
 using iText.Kernel.Pdf.Canvas.Parser.Data;
 using iText.Kernel.Pdf.Canvas.Parser.Filter;
 using System.Runtime.InteropServices.WindowsRuntime;
+using Org.BouncyCastle.Security;
 
 namespace CrewlinkExtractor
 {
@@ -31,10 +32,12 @@ namespace CrewlinkExtractor
 
             using (StreamWriter writer = new StreamWriter(Extractor.DEST))
             {
-                writer.Write(txtdutyplan.duties);
+                for (int i = 0; i < txtdutyplan.dutyDay.Length; i++)
+                {
+                    writer.WriteLine(txtdutyplan.dutyDay[i]);
+                }
             }
-
-            Console.Write(txtdutyplan.startDate);
+            Console.Write("Duty Plan in txt format successfully created.");
             Console.Read();
         }
     }
@@ -43,15 +46,45 @@ namespace CrewlinkExtractor
     {
         public String startDate;
         public String endDate;
-        public String[] duties;
+        public String duties;
+        public String[] dutyDay;
         public String miscData;
+        private static String[] weekdays = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
 
+        /*Check the dutyplan text for the first occurence of the weekday for the first duty and split it by checking it for the occurence of the following week day*/
+        public void ExtractDutyDays(String dutystream)
+        {
+            int weekDay = Array.IndexOf(weekdays, dutystream.Substring(0, 3));
+            List<string> dutyList = new List<string>();
+            int dutyCount = 0;
+            while(true)
+            {
+                weekDay = (weekDay == 6) ? 0 : weekDay + 1;
+                if (dutystream.IndexOf(weekdays[weekDay]) != -1)
+                {
+                    dutyList.Add(dutystream.Substring(0, dutystream.IndexOf(weekdays[weekDay])));
+                    dutystream = dutystream.Substring(dutystream.IndexOf(weekdays[weekDay]));
+                }
+                else
+                {
+                    dutyList.Add(dutystream);
+                    break;
+                }
+                dutyCount++;
+            }
+            dutyDay = dutyList.ToArray();
+        }
+
+
+        /* Take the two unedited Strings generated and divide them up into the start date, end date, all duties 
+         * and all other stuff at the end of the duty plan */
         public TextDutyPlan(String dutystream, String period)
         {
             startDate = period.Substring(0, 7);
             endDate = period.Substring(period.Length - 7);
-            duties = new string[] { dutystream };
-            miscData = null;
+            duties = dutystream.Substring(0, dutystream.IndexOf("Flight time"));
+            miscData = dutystream.Substring(dutystream.IndexOf("Flight time"));
+            ExtractDutyDays(duties);
         }
     }
 
