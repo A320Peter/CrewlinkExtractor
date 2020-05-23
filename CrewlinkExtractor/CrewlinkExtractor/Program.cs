@@ -20,7 +20,7 @@ namespace CrewlinkExtractor
     public class Extractor
     {
 
-        public static readonly String DEST = "results/txt/parse_custom.txt";
+        public static readonly String DEST = "parse_custom.txt";
         public static readonly String SRC = "dutyplan.pdf";
 
         public static void Main(String[] args)
@@ -41,10 +41,10 @@ namespace CrewlinkExtractor
             Console.WriteLine(dutyplan.period);
             DutyPlanParser dutyparser = new DutyPlanParser();
             Console.WriteLine(dutyparser.ParseDate(txtdutyplan.startDate));
-            
-            if (dutyparser.ContainsFlight(txtdutyplan.dutyDay[52]))
+
+            if (dutyparser.ContainsFlight(txtdutyplan.dutyDay[1]))
             {
-                Flight[] flight = dutyparser.ParseFlight(txtdutyplan.dutyDay[53]);
+                Flight[] flight = dutyparser.ParseFlight(txtdutyplan.dutyDay[1]);
 
                 for(int i = 0; i<flight.Length; i++)
                 {
