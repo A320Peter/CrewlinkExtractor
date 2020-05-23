@@ -1,0 +1,4 @@
+- StartDate / EndDate parsen
+- EndDate bei datumsübergreifenden Diensten anpassen
+- Airline-Codes ergänzen
+- "R" bei Requests ignorieren
