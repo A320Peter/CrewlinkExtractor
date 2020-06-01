@@ -3,3 +3,4 @@
 - Airline-Codes ergänzen
 - "R" bei Requests ignorieren
 - Parsen unter zuhilfename des Unix LF nutzen
+--> ParseDate komplett überarbeiten

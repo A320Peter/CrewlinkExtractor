@@ -14,6 +14,8 @@ using iText.Kernel.Pdf.Canvas.Parser.Filter;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Org.BouncyCastle.Security;
 using Org.BouncyCastle.Asn1.Mozilla;
+using System.Data.OleDb;
+using System.Windows;
 
 namespace CrewlinkExtractor
 {
@@ -22,6 +24,10 @@ namespace CrewlinkExtractor
 
         public static readonly String DEST = "parse_custom.txt";
         public static readonly String SRC = "dutyplan.pdf";
+        private static string connetionString = @"Provider=Microsoft.ACE.OLEDB.12.0;Data Source=D:\Projects\Flightlog.accdb";
+        private static OleDbConnection cnn = new OleDbConnection(connetionString);
+        private static OleDbCommand command = new OleDbCommand();
+        
 
         public static void Main(String[] args)
         {
@@ -38,28 +44,42 @@ namespace CrewlinkExtractor
                     writer.WriteLine(txtdutyplan.dutyDay[i]);
                 }
             }
+            Console.WriteLine("Duty Plan successfully created in txt format.");
+
             Console.WriteLine(dutyplan.period);
             DutyPlanParser dutyparser = new DutyPlanParser();
-            Console.WriteLine(dutyparser.ParseDate(txtdutyplan.startDate));
+            DateTime startDate = dutyparser.ParseDate(txtdutyplan.startDate);
 
-            if (dutyparser.ContainsFlight(txtdutyplan.dutyDay[1]))
+            command.Connection = cnn;
+            cnn.Open();
+            for (int i = 0; i < txtdutyplan.dutyDay.Length; i++)
             {
-                Flight[] flight = dutyparser.ParseFlight(txtdutyplan.dutyDay[1]);
-
-                for(int i = 0; i<flight.Length; i++)
+                if (dutyparser.ContainsFlight(txtdutyplan.dutyDay[i]))
                 {
-                    Console.WriteLine(flight[i].startDate);
-                    Console.WriteLine(flight[i].endDate);
-                    Console.WriteLine(flight[i].origin);
-                    Console.WriteLine(flight[i].destination);
-                    Console.WriteLine(flight[i].flightnumber);
-                    Console.WriteLine(flight[i].deadHead);
+                    Flight[] flight = dutyparser.ParseFlights(txtdutyplan.dutyDay[i]);
+                    for (int j = 0; j < flight.Length; j++)
+                    {
+                        writeToDatabase(flight[j].origin, flight[j].destination, flight[j].flightnumber, startDate.AddDays(i), flight[j].startDate, flight[j].endDate);
+                    }
                 }
             }
+            cnn.Close();
+            Console.WriteLine("Duty Plan successfully exported to Access Database.");
 
-
-            Console.WriteLine("Duty Plan in txt format successfully created.");
             Console.Read();
+        }
+        public static void writeToDatabase(string origin, string destination, string flightnumber, DateTime date_, string offblock, string onblock)
+        {
+
+            try
+            {
+                command.CommandText = "INSERT INTO table_flights (Origin, Destination, Flightnumber, Date_, Offblock, Onblock) VALUES ('" + origin + "','" + destination + "','" + flightnumber + "','" + date_ + "','" + offblock + "','" + onblock + "')";
+                command.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Can not open connection ! " + ex);
+            }
         }
     }
 
@@ -83,19 +103,33 @@ namespace CrewlinkExtractor
     {
         public bool ContainsFlight(string dutyDay)
         {
-            return (dutyDay.Substring(dutyDay.IndexOf("OS") - 2, 1) != " ") & (dutyDay.Substring(dutyDay.IndexOf("OS") - 1, 1) != " ") & (dutyDay.Substring(dutyDay.IndexOf("OS") + 2, 1) == " ");
+            try
+            {
+                return (dutyDay.Substring(dutyDay.IndexOf("OS") - 2, 1) != " ") & (dutyDay.Substring(dutyDay.IndexOf("OS") - 1, 1) != " ") & (dutyDay.Substring(dutyDay.IndexOf("OS") + 2, 1) == " ");
+            }
+            catch
+            {
+                return false;
+            }
         }
 
-        public Flight[] ParseFlight(string dutyDay)
+        public Flight[] ParseFlights(string dutyDay)
         {
             List<Flight> flight = new List<Flight>();
             while (dutyDay.IndexOf("OS") > -1)
             {                
-                String flightbuffer = dutyDay.Substring(dutyDay.IndexOf("OS") - 3, 28);
+                String flightbuffer = dutyDay.Substring(dutyDay.IndexOf("OS") - 3);  // ... , 28 entfernt aus Substring()
                 bool deadhead = flightbuffer.Substring(0, 3) == "DH/";
                 flightbuffer = flightbuffer.Substring(3);
                 String[] flight_buffer = flightbuffer.Split(new char[] { ' ' });
-                flight.Add(new Flight() { deadHead = deadhead, flightnumber = flight_buffer[0] + flight_buffer[1], origin = flight_buffer[2], startDate = flight_buffer[3], endDate = flight_buffer[4],  destination = flight_buffer[5].Substring(0, 3) });
+                if (flight_buffer[2] == "R")
+                {
+                    flight.Add(new Flight() { deadHead = deadhead, flightnumber = flight_buffer[0] + flight_buffer[1], origin = flight_buffer[3], startDate = flight_buffer[4], endDate = flight_buffer[5], destination = flight_buffer[6].Substring(0, 3) });
+                }
+                else
+                {
+                    flight.Add(new Flight() { deadHead = deadhead, flightnumber = flight_buffer[0] + flight_buffer[1], origin = flight_buffer[2], startDate = flight_buffer[3], endDate = flight_buffer[4], destination = flight_buffer[5].Substring(0, 3) });
+                }
                 dutyDay = dutyDay.Substring(dutyDay.IndexOf("OS") +25);
             }
             return flight.ToArray();
@@ -137,6 +171,7 @@ namespace CrewlinkExtractor
         public String duties;
         public String[] dutyDay;
         public String miscData;
+        int dutydayCount;
         private static String[] weekdays = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
 
         /*Check the dutyplan text for the first occurence of the weekday for the first duty and split it by checking it for the occurence of the following week day*/
@@ -144,9 +179,11 @@ namespace CrewlinkExtractor
         {
             int weekDay = Array.IndexOf(weekdays, dutystream.Substring(0, 3));
             List<string> dutyList = new List<string>();
-            int dutyCount = 0;
+            dutydayCount = 0;
             while(true)
             {
+                dutystream = dutystream.Remove(5,1);
+                dutystream = dutystream.Insert(5, "\n");
                 weekDay = (weekDay == 6) ? 0 : weekDay + 1;
                 if (dutystream.IndexOf(weekdays[weekDay]) != -1)
                 {
@@ -158,7 +195,7 @@ namespace CrewlinkExtractor
                     dutyList.Add(dutystream);
                     break;
                 }
-                dutyCount++;
+                dutydayCount++;
             }
             dutyDay = dutyList.ToArray();
         }
