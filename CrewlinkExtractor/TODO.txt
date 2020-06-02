@@ -4,3 +4,8 @@
 - "R" bei Requests ignorieren
 - Parsen unter zuhilfename des Unix LF nutzen
 --> ParseDate komplett überarbeiten
+- Actice Crew als boolean übergeben
+- Takeoff / Landing tracken
+- Crew tracken
+
+03.06. 0136: ParseDate komplett neu erstellt, funktioniert nun mit allen Flugnummern.

@@ -16,6 +16,7 @@ using Org.BouncyCastle.Security;
 using Org.BouncyCastle.Asn1.Mozilla;
 using System.Data.OleDb;
 using System.Windows;
+using System.ComponentModel;
 
 namespace CrewlinkExtractor
 {
@@ -52,6 +53,7 @@ namespace CrewlinkExtractor
 
             command.Connection = cnn;
             cnn.Open();
+
             for (int i = 0; i < txtdutyplan.dutyDay.Length; i++)
             {
                 if (dutyparser.ContainsFlight(txtdutyplan.dutyDay[i]))
@@ -59,21 +61,31 @@ namespace CrewlinkExtractor
                     Flight[] flight = dutyparser.ParseFlights(txtdutyplan.dutyDay[i]);
                     for (int j = 0; j < flight.Length; j++)
                     {
-                        writeToDatabase(flight[j].origin, flight[j].destination, flight[j].flightnumber, startDate.AddDays(i), flight[j].startDate, flight[j].endDate);
+                        writeToDatabase(flight[j].origin, flight[j].destination, flight[j].flightnumber, startDate.AddDays(i), flight[j].startDate, flight[j].endDate, flight[j].activeCrew);
                     }
                 }
             }
+
+            DutyDay[] dayArray = dutyparser.ParseDay(txtdutyplan.dutyDay);
+            for (int k = 0; k < dayArray.Length; k++)
+            {
+                for (int l = 0; l < dayArray[k].flights.Length; l++)
+                    {
+                        writeToDatabase(dayArray[k].flights[l].origin, dayArray[k].flights[l].destination, dayArray[k].flights[l].flightnumber, startDate.AddDays(k), dayArray[k].flights[l].startDate, dayArray[k].flights[l].endDate, dayArray[k].flights[l].activeCrew);
+                    }
+            }
+
             cnn.Close();
             Console.WriteLine("Duty Plan successfully exported to Access Database.");
 
             Console.Read();
         }
-        public static void writeToDatabase(string origin, string destination, string flightnumber, DateTime date_, string offblock, string onblock)
+        public static void writeToDatabase(string origin, string destination, string flightnumber, DateTime date_, string offblock, string onblock, bool activeCrew)
         {
 
             try
             {
-                command.CommandText = "INSERT INTO table_flights (Origin, Destination, Flightnumber, Date_, Offblock, Onblock) VALUES ('" + origin + "','" + destination + "','" + flightnumber + "','" + date_ + "','" + offblock + "','" + onblock + "')";
+                command.CommandText = "INSERT INTO table_flights (Origin, Destination, Flightnumber, Date_, Offblock, Onblock, ActiveCrew) VALUES ('" + origin + "','" + destination + "','" + flightnumber + "','" + date_ + "','" + offblock + "','" + onblock + "','" + activeCrew.ToString() + "')";
                 command.ExecuteNonQuery();
             }
             catch (Exception ex)
@@ -83,20 +95,26 @@ namespace CrewlinkExtractor
         }
     }
 
-    public class Flight : Duty
+    public class Flight
     {
         public String origin;
         public String destination;
         public String flightnumber;
-        public bool deadHead;
+        public String startDate;
+        public String endDate;
+        public bool activeCrew;
         public bool activeTakeoff;
         public bool activeLanding;
     }
 
-    public class Duty
+    public class DutyDay
     {
-        public String startDate;
-        public String endDate;
+        public DateTime date;
+        public Flight[] flights;
+        //public int checkinTime;
+        //public int checkoutTime;
+        //public string checkinLoc;
+        //public string checkoutLoc;
     }
 
     public class DutyPlanParser
@@ -113,22 +131,78 @@ namespace CrewlinkExtractor
             }
         }
 
+        
+        public DutyDay[] ParseDay(string[] dutyDay)
+        {
+            int dummy;
+            List<DutyDay> dayList = new List<DutyDay>();
+            for(int i = 0; i < dutyDay.Length; i++)
+            {
+                List<Flight> flight = new List<Flight>();
+                String[] textlines = dutyDay[i].Split(new char[] { '\n' });                
+                for(int j = 0; j < textlines.Length; j++)
+                {
+                    String[] line = textlines[j].Split(new char[] { ' ' });
+                    // check  if enough line content sufficient to stand for a flight
+                    if (line.Length >= 6)
+                    {
+                        Console.WriteLine("Possible Flight");
+                        // check if 2nd and 5th value are numbers (flight number and one of the block times)
+                        if (Int32.TryParse(line[1], out dummy) & Int32.TryParse(line[4], out dummy))
+                        {
+                            Console.WriteLine("Surely a flight");
+                            try
+                            {
+                                if (textlines[j].Substring(0, 3) == "DH/")
+                                {
+                                    Console.WriteLine("Deadhead Flight");
+                                    if (line[2] == "R")
+                                    {
+                                        flight.Add(new Flight() { activeCrew = false, flightnumber = line[0].Substring(3) + line[1], origin = line[3], startDate = line[4], endDate = line[5], destination = line[6].Substring(0, 3) });
+                                    }
+                                    else
+                                    {
+                                        flight.Add(new Flight() { activeCrew = false, flightnumber = line[0].Substring(3) + line[1], origin = line[2], startDate = line[3], endDate = line[4], destination = line[5].Substring(0, 3) });
+                                    }
+                                }
+                                else
+                                {
+                                    Console.WriteLine("Active Flight");
+                                    if (line[2] == "R")
+                                    {
+                                        flight.Add(new Flight() { activeCrew = true, flightnumber = line[0] + line[1], origin = line[3], startDate = line[4], endDate = line[5], destination = line[6].Substring(0, 3) });
+                                    }
+                                    else
+                                    {
+                                        flight.Add(new Flight() { activeCrew = true, flightnumber = line[0] + line[1], origin = line[2], startDate = line[3], endDate = line[4], destination = line[5].Substring(0, 3) });
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                dayList.Add(new DutyDay() { flights = flight.ToArray() });                
+            }
+            return dayList.ToArray();
+        }
+
         public Flight[] ParseFlights(string dutyDay)
         {
             List<Flight> flight = new List<Flight>();
             while (dutyDay.IndexOf("OS") > -1)
             {                
                 String flightbuffer = dutyDay.Substring(dutyDay.IndexOf("OS") - 3);  // ... , 28 entfernt aus Substring()
-                bool deadhead = flightbuffer.Substring(0, 3) == "DH/";
+                bool activeCrew = !(flightbuffer.Substring(0, 3) == "DH/");
                 flightbuffer = flightbuffer.Substring(3);
                 String[] flight_buffer = flightbuffer.Split(new char[] { ' ' });
                 if (flight_buffer[2] == "R")
                 {
-                    flight.Add(new Flight() { deadHead = deadhead, flightnumber = flight_buffer[0] + flight_buffer[1], origin = flight_buffer[3], startDate = flight_buffer[4], endDate = flight_buffer[5], destination = flight_buffer[6].Substring(0, 3) });
+                    flight.Add(new Flight() { activeCrew = activeCrew, flightnumber = flight_buffer[0] + flight_buffer[1], origin = flight_buffer[3], startDate = flight_buffer[4], endDate = flight_buffer[5], destination = flight_buffer[6].Substring(0, 3) });
                 }
                 else
                 {
-                    flight.Add(new Flight() { deadHead = deadhead, flightnumber = flight_buffer[0] + flight_buffer[1], origin = flight_buffer[2], startDate = flight_buffer[3], endDate = flight_buffer[4], destination = flight_buffer[5].Substring(0, 3) });
+                    flight.Add(new Flight() { activeCrew = activeCrew, flightnumber = flight_buffer[0] + flight_buffer[1], origin = flight_buffer[2], startDate = flight_buffer[3], endDate = flight_buffer[4], destination = flight_buffer[5].Substring(0, 3) });
                 }
                 dutyDay = dutyDay.Substring(dutyDay.IndexOf("OS") +25);
             }
