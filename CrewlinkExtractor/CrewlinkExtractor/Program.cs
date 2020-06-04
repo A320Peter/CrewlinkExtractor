@@ -17,32 +17,45 @@ using Org.BouncyCastle.Asn1.Mozilla;
 using System.Data.OleDb;
 using System.Windows;
 using System.ComponentModel;
+using System.Diagnostics.Eventing.Reader;
 
 namespace CrewlinkExtractor
 {
     public class Extractor
     {
 
-        public static readonly String DEST = "parse_custom.txt";
+        public static readonly String DUTIES = "parse_duties.txt";
+        public static readonly String INFO = "parse_info.txt";
         public static readonly String SRC = "dutyplan.pdf";
-        private static string connetionString = @"Provider=Microsoft.ACE.OLEDB.12.0;Data Source=D:\Projects\Flightlog.accdb";
+        private static string connetionString = @"Provider=Microsoft.ACE.OLEDB.12.0;Data Source=Flightlog.accdb";
         private static OleDbConnection cnn = new OleDbConnection(connetionString);
         private static OleDbCommand command = new OleDbCommand();
         
 
         public static void Main(String[] args)
         {
-            FileInfo file = new FileInfo(DEST);
-            file.Directory.Create();
+            FileInfo duties_file = new FileInfo(DUTIES);
+            duties_file.Directory.Create();
+
+            FileInfo duties_info = new FileInfo(INFO);
+            duties_info.Directory.Create();
 
             PDFPlan dutyplan = new PDFPlan(SRC);
             TextDutyPlan txtdutyplan = new TextDutyPlan(dutyplan.duties, dutyplan.period);
 
-            using (StreamWriter writer = new StreamWriter(Extractor.DEST))
+            using (StreamWriter writer = new StreamWriter(Extractor.DUTIES))
             {
                 for (int i = 0; i < txtdutyplan.dutyDay.Length; i++)
                 {
                     writer.WriteLine(txtdutyplan.dutyDay[i]);
+                }
+            }
+
+            using (StreamWriter writer = new StreamWriter(Extractor.INFO))
+            {
+                for (int i = 0; i < txtdutyplan.miscData.Length; i++)
+                {
+                    writer.Write(txtdutyplan.miscData[i]);
                 }
             }
             Console.WriteLine("Duty Plan successfully created in txt format.");
@@ -54,6 +67,7 @@ namespace CrewlinkExtractor
             command.Connection = cnn;
             cnn.Open();
 
+            /*
             for (int i = 0; i < txtdutyplan.dutyDay.Length; i++)
             {
                 if (dutyparser.ContainsFlight(txtdutyplan.dutyDay[i]))
@@ -65,13 +79,14 @@ namespace CrewlinkExtractor
                     }
                 }
             }
+            */
 
             DutyDay[] dayArray = dutyparser.ParseDay(txtdutyplan.dutyDay);
             for (int k = 0; k < dayArray.Length; k++)
             {
                 for (int l = 0; l < dayArray[k].flights.Length; l++)
                     {
-                        writeToDatabase(dayArray[k].flights[l].origin, dayArray[k].flights[l].destination, dayArray[k].flights[l].flightnumber, startDate.AddDays(k), dayArray[k].flights[l].startDate, dayArray[k].flights[l].endDate, dayArray[k].flights[l].activeCrew);
+                        writeToDatabase(dayArray[k].flights[l].origin, dayArray[k].flights[l].destination, dayArray[k].flights[l].flightnumber, startDate.AddDays(k), dayArray[k].flights[l].startDate, dayArray[k].flights[l].endDate, dayArray[k].flights[l].activeCrew, dayArray[k].flights[l].activeTakeoff, dayArray[k].flights[l].activeLanding);
                     }
             }
 
@@ -80,12 +95,12 @@ namespace CrewlinkExtractor
 
             Console.Read();
         }
-        public static void writeToDatabase(string origin, string destination, string flightnumber, DateTime date_, string offblock, string onblock, bool activeCrew)
+        public static void writeToDatabase(string origin, string destination, string flightnumber, DateTime date_, string offblock, string onblock, bool activeCrew, bool activeTakeoff, bool activeLanding)
         {
 
             try
             {
-                command.CommandText = "INSERT INTO table_flights (Origin, Destination, Flightnumber, Date_, Offblock, Onblock, ActiveCrew) VALUES ('" + origin + "','" + destination + "','" + flightnumber + "','" + date_ + "','" + offblock + "','" + onblock + "','" + activeCrew.ToString() + "')";
+                command.CommandText = "INSERT INTO table_flights (Origin, Destination, Flightnumber, Date_, Offblock, Onblock, ActiveCrew, ActiveTakeoff, ActiveLanding) VALUES ('" + origin + "','" + destination + "','" + flightnumber + "','" + date_ + "','" + offblock + "','" + onblock + "','" + activeCrew.ToString() + "','" + activeTakeoff.ToString() + "','" + activeLanding.ToString() + "')";
                 command.ExecuteNonQuery();
             }
             catch (Exception ex)
@@ -146,16 +161,13 @@ namespace CrewlinkExtractor
                     // check  if enough line content sufficient to stand for a flight
                     if (line.Length >= 6)
                     {
-                        Console.WriteLine("Possible Flight");
                         // check if 2nd and 5th value are numbers (flight number and one of the block times)
                         if (Int32.TryParse(line[1], out dummy) & Int32.TryParse(line[4], out dummy))
                         {
-                            Console.WriteLine("Surely a flight");
                             try
                             {
                                 if (textlines[j].Substring(0, 3) == "DH/")
                                 {
-                                    Console.WriteLine("Deadhead Flight");
                                     if (line[2] == "R")
                                     {
                                         flight.Add(new Flight() { activeCrew = false, flightnumber = line[0].Substring(3) + line[1], origin = line[3], startDate = line[4], endDate = line[5], destination = line[6].Substring(0, 3) });
@@ -167,14 +179,35 @@ namespace CrewlinkExtractor
                                 }
                                 else
                                 {
-                                    Console.WriteLine("Active Flight");
+                                    bool takeoff;
+                                    bool landing;
+                                    switch (textlines[j+1])
+                                    {
+                                        case "Take-off, Landing":
+                                            takeoff = true;
+                                            landing = true;
+                                            break;
+                                        case "Take-off":
+                                            takeoff = true;
+                                            landing = false;
+                                            break;
+                                        case "Landing":
+                                            takeoff = false;
+                                            landing = true;
+                                            break;
+                                        default:
+                                            takeoff = false;
+                                            landing = false;
+                                            break;
+                                            
+                                    }
                                     if (line[2] == "R")
                                     {
-                                        flight.Add(new Flight() { activeCrew = true, flightnumber = line[0] + line[1], origin = line[3], startDate = line[4], endDate = line[5], destination = line[6].Substring(0, 3) });
+                                        flight.Add(new Flight() { activeCrew = true, flightnumber = line[0] + line[1], origin = line[3], startDate = line[4], endDate = line[5], destination = line[6].Substring(0, 3), activeTakeoff = takeoff, activeLanding = landing});
                                     }
                                     else
                                     {
-                                        flight.Add(new Flight() { activeCrew = true, flightnumber = line[0] + line[1], origin = line[2], startDate = line[3], endDate = line[4], destination = line[5].Substring(0, 3) });
+                                        flight.Add(new Flight() { activeCrew = true, flightnumber = line[0] + line[1], origin = line[2], startDate = line[3], endDate = line[4], destination = line[5].Substring(0, 3), activeTakeoff = takeoff, activeLanding = landing});
                                     }
                                 }
                             }
@@ -187,6 +220,7 @@ namespace CrewlinkExtractor
             return dayList.ToArray();
         }
 
+        /*
         public Flight[] ParseFlights(string dutyDay)
         {
             List<Flight> flight = new List<Flight>();
@@ -208,6 +242,7 @@ namespace CrewlinkExtractor
             }
             return flight.ToArray();
         }
+        */
 
         public DateTime ParseDate(string date)
         {

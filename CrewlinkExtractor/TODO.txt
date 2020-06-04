@@ -1,11 +1,6 @@
 - StartDate / EndDate parsen
-- EndDate bei datumsübergreifenden Diensten anpassen
-- Airline-Codes ergänzen
-- "R" bei Requests ignorieren
-- Parsen unter zuhilfename des Unix LF nutzen
---> ParseDate komplett überarbeiten
 - Actice Crew als boolean übergeben
-- Takeoff / Landing tracken
-- Crew tracken
+- Crew tracken aus parse_duties - ACHTUNG: LF nicht unbedingt gegeben, bsp 07AUG19
 
 03.06. 0136: ParseDate komplett neu erstellt, funktioniert nun mit allen Flugnummern.
+04.06. 2009: ParseDate um Erfassung der TO/LD Daten erweiter.
